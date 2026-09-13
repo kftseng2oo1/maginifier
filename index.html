@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="放大鏡">
+<meta name="theme-color" content="#000000">
+<title>放大鏡</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<style>
+:root{
+  --ink:#000;--paper:#fff;--soft:#c9c9c9;--amber:#FFC233;--amber-ink:#3A2A00;--pane:#1c1c1c;
+  --tap:56px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--ink);color:var(--paper);
+  font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+  -webkit-user-select:none;user-select:none;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+
+/* ── 頂列：模式 ── */
+.top{flex:0 0 auto;display:flex;align-items:center;gap:8px;
+  padding:calc(env(safe-area-inset-top) + 8px) 12px 8px;background:var(--ink)}
+.brand{font-size:20px;font-weight:700;letter-spacing:.08em;color:var(--amber);padding-right:6px}
+.modes{display:flex;flex:1;background:var(--pane);border-radius:14px;padding:4px}
+.modes button{flex:1;height:44px;border-radius:10px;font-size:18px;color:var(--soft)}
+.modes button.on{background:var(--amber);color:var(--amber-ink);font-weight:700}
+
+/* ── 觀看區 ── */
+.view{flex:1;min-height:0;position:relative;display:none}
+.view.on{display:block}
+.stage{position:absolute;inset:0;overflow:hidden;background:#000;touch-action:none;
+  display:flex;align-items:center;justify-content:center}
+.layer{will-change:transform;transform-origin:center center;display:flex;align-items:center;justify-content:center;width:100%;height:100%}
+.layer video,.layer canvas,.layer img{max-width:100%;max-height:100%;width:auto;height:auto;display:none;pointer-events:none}
+.layer .show{display:block}
+.stage.f-invert .layer{filter:invert(1)}
+.stage.f-mono .layer{filter:grayscale(1) contrast(1.9)}
+.stage.f-yellow .layer{filter:grayscale(1) contrast(1.7) sepia(1) saturate(3) brightness(1.05)}
+.stage.f-yellow-inv .layer{filter:grayscale(1) contrast(1.7) invert(1) sepia(1) saturate(3) brightness(1.05)}
+
+.notice{position:absolute;left:16px;right:16px;top:50%;transform:translateY(-50%);
+  text-align:center;font-size:19px;line-height:1.6;color:var(--soft);display:none;pointer-events:none}
+.notice.on{display:block}
+.notice b{display:block;color:var(--paper);font-size:22px;margin-bottom:8px}
+.notice .go{pointer-events:auto;margin-top:16px}
+
+.zoombadge{position:absolute;top:10px;right:12px;background:rgba(0,0,0,.55);color:var(--amber);
+  font-size:18px;font-weight:700;padding:4px 10px;border-radius:8px;pointer-events:none}
+.frozen{position:absolute;top:10px;left:12px;background:var(--amber);color:var(--amber-ink);
+  font-size:15px;font-weight:700;padding:4px 10px;border-radius:8px;display:none;pointer-events:none}
+.frozen.on{display:block}
+
+/* ── 文字模式 ── */
+#view-txt{background:var(--paper);color:var(--ink);-webkit-user-select:text;user-select:text}
+#view-txt.dark{background:#000;color:#fff}
+#view-txt.cream{background:#F6E9C6;color:#2A2000}
+#txtInput{position:absolute;inset:0;width:100%;height:100%;border:0;resize:none;
+  padding:16px;font:inherit;font-size:20px;line-height:1.6;background:transparent;color:inherit}
+#txtInput::placeholder{color:#8a8a8a}
+#txtRead{position:absolute;inset:0;overflow:auto;-webkit-overflow-scrolling:touch;
+  padding:20px 18px 40px;white-space:pre-wrap;word-break:break-word;line-height:1.55;
+  font-size:40px;font-weight:500;display:none}
+#view-txt.reading #txtInput{display:none}
+#view-txt.reading #txtRead{display:block}
+
+/* ── 底列：控制 ── */
+.bar{flex:0 0 auto;background:var(--ink);padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);
+  display:none;flex-direction:column;gap:10px}
+.bar.on{display:flex}
+.row{display:flex;gap:8px;align-items:center}
+.big{height:var(--tap);min-width:var(--tap);border-radius:14px;background:var(--pane);
+  font-size:17px;font-weight:600;flex:1;display:flex;align-items:center;justify-content:center;gap:6px}
+.big.sq{flex:0 0 var(--tap);font-size:30px;font-weight:400}
+.big.amber{background:var(--amber);color:var(--amber-ink)}
+.big.off{opacity:.35}
+.big svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+input[type=range]{flex:1;height:var(--tap);margin:0;-webkit-appearance:none;appearance:none;background:transparent}
+input[type=range]::-webkit-slider-runnable-track{height:10px;border-radius:5px;background:var(--pane)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:34px;height:34px;border-radius:50%;
+  background:var(--amber);margin-top:-12px;border:3px solid #000}
+input[type=range]::-moz-range-track{height:10px;border-radius:5px;background:var(--pane)}
+input[type=range]::-moz-range-thumb{width:34px;height:34px;border-radius:50%;background:var(--amber);border:3px solid #000}
+.lbl{font-size:16px;color:var(--soft);flex:0 0 auto;width:44px;text-align:center}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header class="top">
+    <div class="brand">放大鏡</div>
+    <div class="modes" role="tablist">
+      <button data-mode="cam" class="on">相機</button>
+      <button data-mode="img">圖片</button>
+      <button data-mode="txt">文字</button>
+    </div>
+  </header>
+
+  <!-- 相機 / 圖片 共用觀看區 -->
+  <section id="view-cam" class="view on">
+    <div class="stage" id="stage">
+      <div class="layer" id="layer">
+        <video id="video" playsinline webkit-playsinline autoplay muted></video>
+        <canvas id="freeze"></canvas>
+        <img id="photo" alt="">
+      </div>
+    </div>
+    <div class="zoombadge" id="zoomBadge">1.0×</div>
+    <div class="frozen" id="frozenTag">已凍結</div>
+    <div class="notice" id="noticeCam">
+      <b>相機尚未開啟</b>
+      <span id="camMsg">按下方「開啟相機」，把手機對準要看的文字。</span>
+      <div class="go"><button class="big amber" id="camStart" style="width:200px;margin:0 auto">開啟相機</button></div>
+    </div>
+    <div class="notice" id="noticeImg">
+      <b>還沒有圖片</b>
+      先把看不清楚的畫面截圖，再從相簿選進來放大看。
+    </div>
+  </section>
+
+  <!-- 文字 -->
+  <section id="view-txt" class="view">
+    <textarea id="txtInput" placeholder="把看不清楚的文字複製過來貼在這裡，再按「放大顯示」。"></textarea>
+    <div id="txtRead"></div>
+  </section>
+
+  <!-- 相機 / 圖片 控制列 -->
+  <div class="bar on" id="barView">
+    <div class="row">
+      <button class="big sq" id="zoomOut" aria-label="縮小">−</button>
+      <input type="range" id="zoom" min="1" max="8" step="0.1" value="1" aria-label="放大倍率">
+      <button class="big sq" id="zoomIn" aria-label="放大">＋</button>
+    </div>
+    <div class="row">
+      <button class="big" id="btnFreeze">
+        <svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>凍結</button>
+      <button class="big" id="btnTorch">
+        <svg viewBox="0 0 24 24"><path d="M9 3h6l1 4H8zM8 7h8v3l-2 2v9H10v-9L8 10z"/></svg>手電筒</button>
+      <button class="big" id="btnFilter">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>原色</button>
+      <button class="big" id="btnPick">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/></svg>選圖片</button>
+      <button class="big sq" id="btnReset" aria-label="回到 1 倍">↺</button>
+    </div>
+  </div>
+
+  <!-- 文字 控制列 -->
+  <div class="bar" id="barTxt">
+    <div class="row">
+      <button class="big sq" id="fontDown" aria-label="字變小">A-</button>
+      <input type="range" id="fontSize" min="24" max="120" step="2" value="40" aria-label="字體大小">
+      <button class="big sq" id="fontUp" aria-label="字變大">A+</button>
+    </div>
+    <div class="row">
+      <button class="big amber" id="btnShow">放大顯示</button>
+      <button class="big" id="btnPaste">貼上</button>
+      <button class="big" id="btnTheme">白底</button>
+      <button class="big sq" id="btnClear" aria-label="清除文字">✕</button>
+    </div>
+  </div>
+
+</div>
+<input type="file" id="file" accept="image/*" style="position:absolute;left:-9999px;width:1px;height:1px">
+
+<script>
+(function(){
+  'use strict';
+  function $(id){return document.getElementById(id);}
+  var app=$('app'), stage=$('stage'), layer=$('layer'), video=$('video'), freeze=$('freeze'), photo=$('photo');
+  var zoomInput=$('zoom'), zoomBadge=$('zoomBadge'), frozenTag=$('frozenTag');
+  var viewCam=$('view-cam'), viewTxt=$('view-txt'), barView=$('barView'), barTxt=$('barTxt');
+  var noticeCam=$('noticeCam'), noticeImg=$('noticeImg'), camMsg=$('camMsg');
+  var fileInput=$('file');
+  var store=window.localStorage;
+
+  var mode='cam';          // cam | img | txt
+  var stream=null, track=null, torchOn=false, frozen=false, hasPhoto=false;
+  var s=1, tx=0, ty=0;     // 目前變形
+  var MAXS=8;
+  var filters=[
+    {c:'',label:'原色'},
+    {c:'f-invert',label:'反色'},
+    {c:'f-mono',label:'黑白'},
+    {c:'f-yellow',label:'黃紙'},
+    {c:'f-yellow-inv',label:'黃字'}
+  ];
+  var fi=parseInt(store.getItem('mag_filter')||'0',10)||0;
+
+  /* ───── 變形 ───── */
+  function apply(){
+    layer.style.transform='translate('+tx+'px,'+ty+'px) scale('+s+')';
+    zoomInput.value=s;
+    zoomBadge.textContent=s.toFixed(1)+'×';
+  }
+  function clamp(){
+    if(s<1)s=1; if(s>MAXS)s=MAXS;
+    var r=stage.getBoundingClientRect();
+    var lim=(s-1)/2;
+    var lx=r.width*lim, ly=r.height*lim;
+    if(tx>lx)tx=lx; if(tx<-lx)tx=-lx;
+    if(ty>ly)ty=ly; if(ty<-ly)ty=-ly;
+  }
+  function setScale(ns,cx,cy){ // 以畫面上 (cx,cy) 為中心縮放
+    var r=stage.getBoundingClientRect();
+    if(cx===undefined){cx=r.width/2;cy=r.height/2;}
+    var px=cx-r.width/2, py=cy-r.height/2;
+    if(ns<1)ns=1; if(ns>MAXS)ns=MAXS;
+    var k=ns/s;
+    tx=px-k*(px-tx); ty=py-k*(py-ty); s=ns;
+    clamp(); apply();
+  }
+  function reset(){s=1;tx=0;ty=0;apply();}
+
+  /* 觸控：單指拖曳、雙指縮放；滑鼠拖曳、滾輪 */
+  var touches={}, lastD=0, lastMid=null, lastOne=null;
+  function tpos(t){var r=stage.getBoundingClientRect();return {x:t.clientX-r.left,y:t.clientY-r.top};}
+  stage.addEventListener('touchstart',function(e){
+    e.preventDefault();
+    if(e.touches.length===2){
+      var a=tpos(e.touches[0]),b=tpos(e.touches[1]);
+      lastD=Math.hypot(a.x-b.x,a.y-b.y); lastMid={x:(a.x+b.x)/2,y:(a.y+b.y)/2}; lastOne=null;
+    }else if(e.touches.length===1){ lastOne=tpos(e.touches[0]); }
+  },{passive:false});
+  stage.addEventListener('touchmove',function(e){
+    e.preventDefault();
+    if(e.touches.length===2&&lastMid){
+      var a=tpos(e.touches[0]),b=tpos(e.touches[1]);
+      var d=Math.hypot(a.x-b.x,a.y-b.y), mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+      tx+=mid.x-lastMid.x; ty+=mid.y-lastMid.y;
+      setScale(s*(d/lastD),mid.x,mid.y);
+      lastD=d; lastMid=mid;
+    }else if(e.touches.length===1&&lastOne){
+      var p=tpos(e.touches[0]);
+      tx+=p.x-lastOne.x; ty+=p.y-lastOne.y; lastOne=p;
+      clamp(); apply();
+    }
+  },{passive:false});
+  stage.addEventListener('touchend',function(e){
+    if(e.touches.length<2){lastMid=null;}
+    if(e.touches.length===1){lastOne=tpos(e.touches[0]);} else if(e.touches.length===0){lastOne=null;}
+  });
+  var mouse=null;
+  stage.addEventListener('mousedown',function(e){mouse=tpos(e);});
+  window.addEventListener('mousemove',function(e){
+    if(!mouse)return; var p=tpos(e); tx+=p.x-mouse.x; ty+=p.y-mouse.y; mouse=p; clamp(); apply();
+  });
+  window.addEventListener('mouseup',function(){mouse=null;});
+  stage.addEventListener('wheel',function(e){
+    e.preventDefault(); var p=tpos(e); setScale(s*(e.deltaY<0?1.1:0.9),p.x,p.y);
+  },{passive:false});
+  stage.addEventListener('dblclick',function(e){var p=tpos(e); setScale(s>1.5?1:3,p.x,p.y);});
+
+  zoomInput.addEventListener('input',function(){setScale(parseFloat(zoomInput.value));});
+  $('zoomIn').addEventListener('click',function(){setScale(s+0.5);});
+  $('zoomOut').addEventListener('click',function(){setScale(s-0.5);});
+  $('btnReset').addEventListener('click',reset);
+
+  /* ───── 濾鏡 ───── */
+  function applyFilter(){
+    for(var i=0;i<filters.length;i++){ if(filters[i].c)stage.classList.remove(filters[i].c); }
+    if(filters[fi].c)stage.classList.add(filters[fi].c);
+    $('btnFilter').lastChild.nodeValue=filters[fi].label;
+    store.setItem('mag_filter',String(fi));
+  }
+  $('btnFilter').addEventListener('click',function(){fi=(fi+1)%filters.length;applyFilter();});
+  applyFilter();
+
+  /* ───── 相機 ───── */
+  function show(el){
+    video.classList.remove('show'); freeze.classList.remove('show'); photo.classList.remove('show');
+    if(el)el.classList.add('show');
+  }
+  function stopCam(){
+    if(stream){var ts=stream.getTracks();for(var i=0;i<ts.length;i++)ts[i].stop();}
+    stream=null; track=null; torchOn=false; $('btnTorch').classList.remove('amber');
+  }
+  function startCam(){
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+      camMsg.textContent='這個瀏覽器無法使用相機。請改用 Safari 開啟，或改用「圖片」模式放大截圖。';
+      $('camStart').style.display='none'; return;
+    }
+    var c={video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false};
+    navigator.mediaDevices.getUserMedia(c).then(function(st){
+      stream=st; track=st.getVideoTracks()[0];
+      video.srcObject=st; video.play().catch(function(){});
+      show(video); noticeCam.classList.remove('on'); frozen=false; frozenTag.classList.remove('on');
+      $('btnFreeze').lastChild.nodeValue='凍結';
+      var caps=track.getCapabilities?track.getCapabilities():{};
+      $('btnTorch').classList.toggle('off',!caps.torch);
+    }).catch(function(err){
+      camMsg.textContent='相機打不開（'+(err&&err.name?err.name:'未知錯誤')+'）。請確認已允許相機權限，或改用「圖片」模式。';
+      noticeCam.classList.add('on');
+    });
+  }
+  $('camStart').addEventListener('click',startCam);
+
+  $('btnFreeze').addEventListener('click',function(){
+    if(mode!=='cam'||!stream)return;
+    if(!frozen){
+      freeze.width=video.videoWidth||1280; freeze.height=video.videoHeight||720;
+      freeze.getContext('2d').drawImage(video,0,0,freeze.width,freeze.height);
+      show(freeze); frozen=true; frozenTag.classList.add('on'); this.lastChild.nodeValue='繼續';
+      this.classList.add('amber');
+    }else{
+      show(video); frozen=false; frozenTag.classList.remove('on'); this.lastChild.nodeValue='凍結';
+      this.classList.remove('amber');
+    }
+  });
+
+  $('btnTorch').addEventListener('click',function(){
+    if(!track||!track.applyConstraints)return;
+    var caps=track.getCapabilities?track.getCapabilities():{};
+    if(!caps.torch){ this.classList.add('off'); return; }
+    var self=this;
+    track.applyConstraints({advanced:[{torch:!torchOn}]}).then(function(){
+      torchOn=!torchOn; self.classList.toggle('amber',torchOn);
+    }).catch(function(){ self.classList.add('off'); });
+  });
+
+  /* ───── 圖片 ───── */
+  $('btnPick').addEventListener('click',function(){ if(mode==='cam')setMode('img'); fileInput.value=''; fileInput.click(); });
+  fileInput.addEventListener('change',function(){
+    var f=fileInput.files&&fileInput.files[0]; if(!f)return;
+    var reader=new FileReader();
+    reader.onload=function(ev){ photo.onload=function(){reset();}; photo.src=ev.target.result; hasPhoto=true; show(photo); noticeImg.classList.remove('on'); };
+    reader.readAsDataURL(f);
+  });
+  document.addEventListener('paste',function(e){ // 桌面版可直接貼截圖
+    var items=e.clipboardData&&e.clipboardData.items; if(!items)return;
+    for(var i=0;i<items.length;i++){
+      if(items[i].type.indexOf('image')===0){
+        var f=items[i].getAsFile(); var reader=new FileReader();
+        reader.onload=function(ev){ setMode('img'); photo.onload=function(){reset();}; photo.src=ev.target.result; hasPhoto=true; show(photo); noticeImg.classList.remove('on'); };
+        reader.readAsDataURL(f); e.preventDefault(); return;
+      }
+    }
+  });
+
+  /* ───── 文字 ───── */
+  var txtInput=$('txtInput'), txtRead=$('txtRead'), fontInput=$('fontSize');
+  var themes=[{c:'',label:'白底'},{c:'dark',label:'黑底'},{c:'cream',label:'米黃'}];
+  var ti=parseInt(store.getItem('mag_theme')||'0',10)||0;
+  var fs=parseInt(store.getItem('mag_font')||'40',10)||40;
+  function applyFont(){ txtRead.style.fontSize=fs+'px'; fontInput.value=fs; store.setItem('mag_font',String(fs)); }
+  function applyTheme(){
+    viewTxt.classList.remove('dark'); viewTxt.classList.remove('cream');
+    if(themes[ti].c)viewTxt.classList.add(themes[ti].c);
+    $('btnTheme').textContent=themes[ti].label; store.setItem('mag_theme',String(ti));
+  }
+  fontInput.addEventListener('input',function(){fs=parseInt(fontInput.value,10);applyFont();});
+  $('fontUp').addEventListener('click',function(){fs=Math.min(120,fs+4);applyFont();});
+  $('fontDown').addEventListener('click',function(){fs=Math.max(24,fs-4);applyFont();});
+  $('btnTheme').addEventListener('click',function(){ti=(ti+1)%themes.length;applyTheme();});
+  function showText(){
+    var t=txtInput.value; if(!t.replace(/\s/g,'')){txtInput.focus();return;}
+    txtRead.textContent=t; viewTxt.classList.add('reading'); $('btnShow').textContent='編輯文字';
+    store.setItem('mag_text',t);
+  }
+  function editText(){ viewTxt.classList.remove('reading'); $('btnShow').textContent='放大顯示'; txtInput.focus(); }
+  $('btnShow').addEventListener('click',function(){ viewTxt.classList.contains('reading')?editText():showText(); });
+  $('btnPaste').addEventListener('click',function(){
+    if(navigator.clipboard&&navigator.clipboard.readText){
+      navigator.clipboard.readText().then(function(t){ if(t){txtInput.value=t;showText();} else editText(); }).catch(editText);
+    }else editText();
+  });
+  $('btnClear').addEventListener('click',function(){ txtInput.value=''; txtRead.textContent=''; store.removeItem('mag_text'); editText(); });
+  txtInput.value=store.getItem('mag_text')||'';
+  applyFont(); applyTheme();
+
+  /* ───── 模式切換 ───── */
+  var modeBtns=document.querySelectorAll('.modes button');
+  function setMode(m){
+    mode=m;
+    for(var i=0;i<modeBtns.length;i++)modeBtns[i].classList.toggle('on',modeBtns[i].getAttribute('data-mode')===m);
+    viewCam.classList.toggle('on',m!=='txt'); viewTxt.classList.toggle('on',m==='txt');
+    barView.classList.toggle('on',m!=='txt'); barTxt.classList.toggle('on',m==='txt');
+    noticeCam.classList.remove('on'); noticeImg.classList.remove('on');
+    if(m==='cam'){
+      show(frozen?freeze:video);
+      if(!stream){ noticeCam.classList.add('on'); }
+      $('btnFreeze').classList.remove('off'); $('btnTorch').classList.remove('off');
+    }else if(m==='img'){
+      show(hasPhoto?photo:null); if(!hasPhoto)noticeImg.classList.add('on');
+      $('btnFreeze').classList.add('off'); $('btnTorch').classList.add('off');
+    }
+    if(m==='txt'&&stream)stopCam();
+    reset();
+  }
+  for(var i=0;i<modeBtns.length;i++){
+    modeBtns[i].addEventListener('click',function(){setMode(this.getAttribute('data-mode'));});
+  }
+  document.addEventListener('visibilitychange',function(){ if(document.hidden&&stream)stopCam(); else if(!document.hidden&&mode==='cam'&&!stream)noticeCam.classList.add('on'); });
+  window.addEventListener('orientationchange',function(){setTimeout(function(){clamp();apply();},300);});
+
+  setMode('cam');
+  if(store.getItem('mag_text'))applyFont();
+  if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(function(){}); }
+})();
+</script>
+</body>
+</html>
