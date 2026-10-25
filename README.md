@@ -8,3 +8,8 @@
 - icon-*.png — 圖示
 
 iOS：用 Safari 開啟 → 分享 → 加入主畫面。相機需 HTTPS，LINE 內建瀏覽器可能無法開相機。
+
+## 唸給我聽（v2）
+- 朗讀：POST arcar `/tts`（台灣腔），失敗自動改用手機內建語音
+- 看字／翻譯：POST arcar `/v1/messages`（Claude 視覺，model 在 index.html 的 AI_MODEL 常數）
+- 端點寫在 index.html 搜尋 `var API=` 即可修改

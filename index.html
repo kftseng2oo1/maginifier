@@ -83,6 +83,31 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--amber);outline-
 .big.amber{background:var(--amber);color:var(--amber-ink)}
 .big.off{opacity:.35}
 .big svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.speak{flex:2;font-size:20px}
+.big.speaking{background:#E5484D;color:#fff}
+#txtRead span{border-radius:6px;transition:background .2s}
+#txtRead span.say{background:var(--amber);color:#000}
+.sheet{position:absolute;left:0;right:0;bottom:0;max-height:72%;background:#fff;color:#000;
+  border-radius:18px 18px 0 0;padding:12px 16px 14px;display:none;flex-direction:column;gap:10px;z-index:5;
+  box-shadow:0 -6px 24px rgba(0,0,0,.5)}
+.sheet.on{display:flex}
+.sheet .hd{display:flex;align-items:center;gap:8px;font-size:16px;color:#555}
+.sheet .hd b{flex:1;color:#000;font-size:18px}
+.sheet .x{width:44px;height:44px;border-radius:12px;background:#eee;font-size:22px;color:#000}
+.sheet .zh{overflow:auto;-webkit-overflow-scrolling:touch;white-space:pre-wrap;word-break:break-word;
+  line-height:1.5;font-weight:500;-webkit-user-select:text;user-select:text;min-height:60px}
+.sheet .zh span{border-radius:6px}
+.sheet .zh span.say{background:var(--amber)}
+.sheet .src{font-size:17px;color:#555;white-space:pre-wrap;max-height:22vh;overflow:auto;
+  border-top:1px solid #ddd;padding-top:8px;-webkit-user-select:text;user-select:text}
+.sheet .row .big{background:#eee;color:#000}
+.sheet .row .big.amber{background:var(--amber);color:var(--amber-ink)}
+.sheet .row .big.speaking{background:#E5484D;color:#fff}
+.busy{font-size:22px;padding:18px 0;text-align:center;color:#333}
+.toast{position:fixed;left:16px;right:16px;top:calc(env(safe-area-inset-top) + 70px);z-index:20;
+  background:#222;color:#fff;font-size:17px;line-height:1.5;padding:12px 14px;border-radius:12px;
+  border:1px solid #444;display:none;text-align:center}
+.toast.on{display:block}
 input[type=range]{flex:1;height:var(--tap);margin:0;-webkit-appearance:none;appearance:none;background:transparent}
 input[type=range]::-webkit-slider-runnable-track{height:10px;border-radius:5px;background:var(--pane)}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:34px;height:34px;border-radius:50%;
@@ -115,6 +140,15 @@ input[type=range]::-moz-range-thumb{width:34px;height:34px;border-radius:50%;bac
     </div>
     <div class="zoombadge" id="zoomBadge">1.0×</div>
     <div class="frozen" id="frozenTag">已凍結</div>
+    <div class="sheet" id="sheet" aria-live="polite">
+      <div class="hd"><b id="shTitle">看到的文字</b><button class="x" id="shClose" aria-label="關閉">✕</button></div>
+      <div class="zh" id="shZh"></div>
+      <div class="src" id="shSrc"></div>
+      <div class="row" id="shBtns">
+        <button class="big amber" id="shSpeak">🔊 再唸一次</button>
+        <button class="big" id="shToText">放大看</button>
+      </div>
+    </div>
     <div class="notice" id="noticeCam">
       <b>相機尚未開啟</b>
       <span id="camMsg">按下方「開啟相機」，把手機對準要看的文字。</span>
@@ -150,6 +184,11 @@ input[type=range]::-moz-range-thumb{width:34px;height:34px;border-radius:50%;bac
         <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/></svg>選圖片</button>
       <button class="big sq" id="btnReset" aria-label="回到 1 倍">↺</button>
     </div>
+    <div class="row">
+      <button class="big amber speak jsSpeak" id="btnSpeakV">🔊 唸給我聽</button>
+      <button class="big jsVoice">女聲</button>
+      <button class="big jsRate">慢速</button>
+    </div>
   </div>
 
   <!-- 文字 控制列 -->
@@ -160,14 +199,20 @@ input[type=range]::-moz-range-thumb{width:34px;height:34px;border-radius:50%;bac
       <button class="big sq" id="fontUp" aria-label="字變大">A+</button>
     </div>
     <div class="row">
-      <button class="big amber" id="btnShow">放大顯示</button>
+      <button class="big" id="btnShow">放大顯示</button>
       <button class="big" id="btnPaste">貼上</button>
       <button class="big" id="btnTheme">白底</button>
       <button class="big sq" id="btnClear" aria-label="清除文字">✕</button>
     </div>
+    <div class="row">
+      <button class="big amber speak jsSpeak" id="btnSpeakT">🔊 唸給我聽</button>
+      <button class="big jsVoice">女聲</button>
+      <button class="big jsRate">慢速</button>
+    </div>
   </div>
 
 </div>
+<div class="toast" id="toast"></div>
 <input type="file" id="file" accept="image/*" style="position:absolute;left:-9999px;width:1px;height:1px">
 
 <script>
@@ -361,23 +406,24 @@ input[type=range]::-moz-range-thumb{width:34px;height:34px;border-radius:50%;bac
   $('btnTheme').addEventListener('click',function(){ti=(ti+1)%themes.length;applyTheme();});
   function showText(){
     var t=txtInput.value; if(!t.replace(/\s/g,'')){txtInput.focus();return;}
-    txtRead.textContent=t; viewTxt.classList.add('reading'); $('btnShow').textContent='編輯文字';
+    renderRead(t); viewTxt.classList.add('reading'); $('btnShow').textContent='編輯文字';
     store.setItem('mag_text',t);
   }
-  function editText(){ viewTxt.classList.remove('reading'); $('btnShow').textContent='放大顯示'; txtInput.focus(); }
+  function editText(){ stopSpeak(); viewTxt.classList.remove('reading'); $('btnShow').textContent='放大顯示'; txtInput.focus(); }
   $('btnShow').addEventListener('click',function(){ viewTxt.classList.contains('reading')?editText():showText(); });
   $('btnPaste').addEventListener('click',function(){
     if(navigator.clipboard&&navigator.clipboard.readText){
       navigator.clipboard.readText().then(function(t){ if(t){txtInput.value=t;showText();} else editText(); }).catch(editText);
     }else editText();
   });
-  $('btnClear').addEventListener('click',function(){ txtInput.value=''; txtRead.textContent=''; store.removeItem('mag_text'); editText(); });
+  $('btnClear').addEventListener('click',function(){ stopSpeak(); txtInput.value=''; txtRead.textContent=''; store.removeItem('mag_text'); editText(); });
   txtInput.value=store.getItem('mag_text')||'';
   applyFont(); applyTheme();
 
   /* ───── 模式切換 ───── */
   var modeBtns=document.querySelectorAll('.modes button');
   function setMode(m){
+    if(window.__magStop)window.__magStop();
     mode=m;
     for(var i=0;i<modeBtns.length;i++)modeBtns[i].classList.toggle('on',modeBtns[i].getAttribute('data-mode')===m);
     viewCam.classList.toggle('on',m!=='txt'); viewTxt.classList.toggle('on',m==='txt');
@@ -397,8 +443,270 @@ input[type=range]::-moz-range-thumb{width:34px;height:34px;border-radius:50%;bac
   for(var i=0;i<modeBtns.length;i++){
     modeBtns[i].addEventListener('click',function(){setMode(this.getAttribute('data-mode'));});
   }
-  document.addEventListener('visibilitychange',function(){ if(document.hidden&&stream)stopCam(); else if(!document.hidden&&mode==='cam'&&!stream)noticeCam.classList.add('on'); });
+  document.addEventListener('visibilitychange',function(){ if(document.hidden&&window.__magStop)window.__magStop(); if(document.hidden&&stream)stopCam(); else if(!document.hidden&&mode==='cam'&&!stream)noticeCam.classList.add('on'); });
   window.addEventListener('orientationchange',function(){setTimeout(function(){clamp();apply();},300);});
+
+  /* ═════════ 唸給我聽 ═════════
+     朗讀：arcar /tts（台灣腔），失敗改用手機內建語音
+     看字：Claude 視覺辨識，外語自動翻成繁體中文 */
+  var API='https://arcar.kftseng2oo1.workers.dev';
+  var TTS_URL=API+'/tts';
+  var AI_URL=API+'/v1/messages';
+  var AI_MODEL='claude-haiku-5-5';
+
+  var toastEl=$('toast'), toastT=0;
+  function toast(msg,ms){
+    toastEl.textContent=msg; toastEl.classList.add('on');
+    clearTimeout(toastT); toastT=setTimeout(function(){toastEl.classList.remove('on');},ms||3000);
+  }
+
+  /* 聲音與速度設定 */
+  var VOICES=[{k:'female',n:'女聲'},{k:'female2',n:'女聲二'},{k:'male',n:'男聲'}];
+  var RATES=[{v:-20,n:'慢速',l:0.8},{v:0,n:'正常',l:1},{v:-35,n:'很慢',l:0.65}];
+  var vi=parseInt(store.getItem('mag_voice')||'0',10)||0; if(vi>=VOICES.length)vi=0;
+  var ri=parseInt(store.getItem('mag_rate')||'0',10)||0; if(ri>=RATES.length)ri=0;
+  function eachCls(c,fn){var l=document.querySelectorAll('.'+c);for(var i=0;i<l.length;i++)fn(l[i]);}
+  function applyVoiceUI(){
+    eachCls('jsVoice',function(b){b.textContent=VOICES[vi].n;});
+    eachCls('jsRate',function(b){b.textContent=RATES[ri].n;});
+    store.setItem('mag_voice',String(vi)); store.setItem('mag_rate',String(ri));
+  }
+  eachCls('jsVoice',function(b){b.addEventListener('click',function(){vi=(vi+1)%VOICES.length;applyVoiceUI();});});
+  eachCls('jsRate',function(b){b.addEventListener('click',function(){ri=(ri+1)%RATES.length;applyVoiceUI();});});
+  applyVoiceUI();
+
+  /* iOS 解鎖：在點擊當下先播一段靜音，之後同一個 audio 才能自動播 */
+  var player=document.createElement('audio');
+  player.setAttribute('playsinline',''); player.setAttribute('webkit-playsinline','');
+  document.body.appendChild(player);
+  var SILENT=(function(){
+    var n=800,buf=new ArrayBuffer(44+n*2),v=new DataView(buf),i,b='',u;
+    function w(o,t){for(var k=0;k<t.length;k++)v.setUint8(o+k,t.charCodeAt(k));}
+    w(0,'RIFF');v.setUint32(4,36+n*2,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);
+    v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);
+    v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n*2,true);
+    u=new Uint8Array(buf);for(i=0;i<u.length;i++)b+=String.fromCharCode(u[i]);
+    return 'data:audio/wav;base64,'+btoa(b);
+  })();
+  function unlock(){
+    try{player.src=SILENT;var p=player.play();if(p&&p.catch)p.catch(function(){});}catch(e){}
+    if(window.speechSynthesis){try{speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance(' '));}catch(e){}}
+  }
+
+  /* 分句：保留原文（含換行），每段 ≤ 120 字，/tts 上限 300 */
+  function splitChunks(t){
+    var segs=t.match(/[^。！？!?；;\n]*[。！？!?；;\n]+|[^。！？!?；;\n]+$/g)||[];
+    var out=[],cur='',i,sg;
+    for(i=0;i<segs.length;i++){
+      sg=segs[i];
+      while(sg.length>200){ if(cur){out.push(cur);cur='';} out.push(sg.slice(0,200)); sg=sg.slice(200); }
+      if(cur&&(cur+sg).length>120){out.push(cur);cur='';}
+      cur+=sg;
+      if(/\n\s*$/.test(cur)&&cur.replace(/\s/g,'').length>0){out.push(cur);cur='';}
+    }
+    if(cur)out.push(cur);
+    return out;
+  }
+  function speakable(x){return x.replace(/\s+/g,' ').replace(/^\s+|\s+$/g,'');}
+
+  function fetchTTS(text){
+    return fetch(TTS_URL,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:text,voice:VOICES[vi].k,rate:RATES[ri].v})})
+    .then(function(r){ if(!r.ok)throw new Error('tts '+r.status); return r.blob(); })
+    .then(function(b){ if(!b.size)throw new Error('empty'); return URL.createObjectURL(b); });
+  }
+  var zhVoice=null;
+  function pickVoice(){
+    if(!window.speechSynthesis)return;
+    var vs=speechSynthesis.getVoices()||[],i;
+    for(i=0;i<vs.length;i++){ if(/zh[-_]TW/i.test(vs[i].lang)){zhVoice=vs[i];return;} }
+    for(i=0;i<vs.length;i++){ if(/^zh/i.test(vs[i].lang)){zhVoice=vs[i];return;} }
+  }
+  if(window.speechSynthesis){pickVoice(); if('onvoiceschanged' in speechSynthesis)speechSynthesis.onvoiceschanged=pickVoice;}
+  function localSay(text,done){
+    if(!window.speechSynthesis){done();return;}
+    var u=new SpeechSynthesisUtterance(speakable(text)), fired=false;
+    function fin(){if(!fired){fired=true;done();}}
+    u.lang='zh-TW'; if(zhVoice)u.voice=zhVoice; u.rate=RATES[ri].l;
+    u.onend=fin; u.onerror=fin;
+    speechSynthesis.speak(u);
+  }
+
+  var sp={id:0,on:false,onStop:null};
+  function setSpeakingUI(on){
+    eachCls('jsSpeak',function(b){ b.classList.toggle('speaking',on); b.textContent=on?'■ 停止朗讀':'🔊 唸給我聽'; });
+    var s=$('shSpeak'); s.classList.toggle('speaking',on); s.textContent=on?'■ 停止':'🔊 再唸一次';
+  }
+  function stopSpeak(){
+    sp.id++;
+    try{player.pause();}catch(e){}
+    player.onended=null; player.onerror=null;
+    if(window.speechSynthesis){try{speechSynthesis.cancel();}catch(e){}}
+    var f=sp.onStop; sp.on=false; sp.onStop=null; setSpeakingUI(false);
+    if(f)f();
+  }
+  /* chunks 從 start 開始唸；onChunk(i) 用來標亮；onStop 結束或被停止時呼叫 */
+  function speak(chunks,start,onChunk,onStop){
+    stopSpeak();
+    var id=sp.id, useLocal=false, cache={};
+    sp.on=true; sp.onStop=onStop; setSpeakingUI(true);
+    function get(i){ if(!cache[i])cache[i]=fetchTTS(speakable(chunks[i])); return cache[i]; }
+    function next(i){ while(i<chunks.length&&!speakable(chunks[i]))i++; return i; }
+    function step(i){
+      if(id!==sp.id)return;
+      i=next(i);
+      if(i>=chunks.length){ stopSpeak(); return; }
+      if(onChunk)onChunk(i);
+      if(useLocal){ localSay(chunks[i],function(){step(i+1);}); return; }
+      get(i).then(function(url){
+        if(id!==sp.id)return;
+        var n=next(i+1); if(n<chunks.length)get(n).catch(function(){});
+        player.onended=function(){ URL.revokeObjectURL(url); step(i+1); };
+        player.onerror=function(){ player.onerror=null; useLocal=true; localSay(chunks[i],function(){step(i+1);}); };
+        player.src=url;
+        var p=player.play();
+        if(p&&p.catch)p.catch(function(){ if(id!==sp.id)return; player.onended=null; useLocal=true; localSay(chunks[i],function(){step(i+1);}); });
+      },function(){
+        if(id!==sp.id)return;
+        if(!window.speechSynthesis){ toast('朗讀服務連不上，請稍後再試'); stopSpeak(); return; }
+        useLocal=true; toast('改用手機內建語音朗讀',2000);
+        localSay(chunks[i],function(){step(i+1);});
+      });
+    }
+    step(start||0);
+  }
+  window.__magStop=function(){ stopSpeak(); hideSheet(); };
+
+  /* 依 chunks 產生可標亮的 span */
+  function fillSpans(box,chunks){
+    box.innerHTML='';
+    for(var i=0;i<chunks.length;i++){
+      var e=document.createElement('span'); e.textContent=chunks[i]; e.setAttribute('data-i',String(i)); box.appendChild(e);
+    }
+  }
+  function mark(box,i){
+    var l=box.querySelectorAll('span'),k;
+    for(k=0;k<l.length;k++)l[k].classList.toggle('say',k===i);
+    if(i>=0&&l[i]){ try{l[i].scrollIntoView({block:'center',behavior:'smooth'});}catch(e){l[i].scrollIntoView();} }
+  }
+
+  /* ── 文字模式 ── */
+  var readChunks=[];
+  function renderRead(t){ readChunks=splitChunks(t); fillSpans(txtRead,readChunks); }
+  function speakText(from){
+    speak(readChunks,from,function(i){mark(txtRead,i);},function(){mark(txtRead,-1);});
+  }
+  $('btnSpeakT').addEventListener('click',function(){
+    if(sp.on){stopSpeak();return;}
+    if(!viewTxt.classList.contains('reading')){
+      if(!txtInput.value.replace(/\s/g,'')){ toast('先貼上要唸的文字'); txtInput.focus(); return; }
+      showText();
+    }
+    unlock(); speakText(0);
+  });
+  txtRead.addEventListener('click',function(e){ // 點哪一句就從哪一句開始唸
+    var t=e.target; if(!t||!t.getAttribute)return;
+    var i=t.getAttribute('data-i'); if(i===null)return;
+    var sel=window.getSelection&&window.getSelection(); if(sel&&String(sel).length)return;
+    unlock(); speakText(parseInt(i,10));
+  });
+
+  /* ── 相機 / 圖片：看字 → 翻譯 → 朗讀 ── */
+  var sheet=$('sheet'), shZh=$('shZh'), shSrc=$('shSrc'), shTitle=$('shTitle'), shBtns=$('shBtns');
+  var ocr={id:0,zh:'',chunks:[]};
+  function hideSheet(){ ocr.id++; sheet.classList.remove('on'); }
+  function sheetFont(){ shZh.style.fontSize=Math.max(26,Math.min(fs,56))+'px'; }
+
+  function visibleCrop(){
+    var el,w,h;
+    if(mode==='img'&&hasPhoto){el=photo;w=photo.naturalWidth;h=photo.naturalHeight;}
+    else if(mode==='cam'&&stream&&frozen){el=freeze;w=freeze.width;h=freeze.height;}
+    else return null;
+    var er=el.getBoundingClientRect(), sr=stage.getBoundingClientRect();
+    var c={x:0,y:0,w:w,h:h};
+    if(s>1.05&&er.width>0){
+      var x0=Math.max(er.left,sr.left),y0=Math.max(er.top,sr.top),x1=Math.min(er.right,sr.right),y1=Math.min(er.bottom,sr.bottom);
+      if(x1>x0&&y1>y0){
+        c.x=(x0-er.left)/er.width*w; c.y=(y0-er.top)/er.height*h;
+        c.w=(x1-x0)/er.width*w; c.h=(y1-y0)/er.height*h;
+      }
+    }
+    var k=Math.min(1,1600/Math.max(c.w,c.h)), cv=document.createElement('canvas');
+    cv.width=Math.max(1,Math.round(c.w*k)); cv.height=Math.max(1,Math.round(c.h*k));
+    var g=cv.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,cv.width,cv.height);
+    g.drawImage(el,c.x,c.y,c.w,c.h,0,0,cv.width,cv.height);
+    return cv.toDataURL('image/jpeg',0.85).split(',')[1];
+  }
+
+  var OCR_SYS='你是幫視力不好的長輩讀字的助手。讀出圖片中清楚可見的文字，依正常閱讀順序（日文直排由右至左、由上而下）。\n'+
+    '規則：\n1. 中文：照原文寫出，簡體字轉成繁體。\n'+
+    '2. 日文、英文、韓文等外語：src 照錄原文，zh 翻成自然的台灣繁體中文（菜單、標示、說明書照意思翻，不要逐字硬翻）。\n'+
+    '3. 被切掉一半或模糊看不清的字直接略過，不要猜。\n'+
+    '4. 只輸出一個 JSON，不要其他文字：{"lang":"zh|ja|en|ko|other","src":"原文","zh":"要唸出來的繁體中文"}\n'+
+    '5. 圖中沒有文字時，zh 給空字串。';
+  var LANGS={zh:'中文',ja:'日文',en:'英文',ko:'韓文',other:'外文'};
+
+  function askAI(b64){
+    return fetch(AI_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      model:AI_MODEL,max_tokens:2500,system:OCR_SYS,
+      messages:[{role:'user',content:[
+        {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
+        {type:'text',text:'請讀出這張圖裡的文字。'}]}]
+    })}).then(function(r){
+      return r.json().then(function(d){
+        if(!r.ok)throw new Error((d&&d.error&&(d.error.message||d.error))||('HTTP '+r.status));
+        var t='',i; for(i=0;d.content&&i<d.content.length;i++)if(d.content[i].type==='text')t+=d.content[i].text;
+        var a=t.indexOf('{'),b=t.lastIndexOf('}');
+        if(a<0||b<a)throw new Error('看不懂回傳內容');
+        return JSON.parse(t.slice(a,b+1));
+      });
+    });
+  }
+
+  function speakOCR(){
+    speak(ocr.chunks,0,function(i){mark(shZh,i);},function(){mark(shZh,-1);});
+  }
+  function runOCR(){
+    if(mode==='cam'&&!stream){ toast('先開啟相機'); return; }
+    if(mode==='img'&&!hasPhoto){ toast('先選一張圖片'); return; }
+    unlock();
+    if(mode==='cam'&&!frozen)$('btnFreeze').click();   // 先定格，看到的就是要唸的
+    var b64=visibleCrop(); if(!b64){toast('抓不到畫面，請再試一次');return;}
+    var id=++ocr.id;
+    shTitle.textContent= s>1.05?'正在看放大的這一塊…':'正在看整個畫面…';
+    shZh.innerHTML='<div class="busy">看字中，請稍等幾秒…</div>'; shSrc.style.display='none'; shBtns.style.display='none';
+    sheet.classList.add('on'); sheetFont();
+    setSpeakingUI(false);
+    askAI(b64).then(function(r){
+      if(id!==ocr.id)return;
+      var zh=String(r.zh||'').replace(/^\s+|\s+$/g,''), lang=LANGS[r.lang]?r.lang:'other';
+      if(!zh){ shTitle.textContent='沒有看到文字'; shZh.innerHTML='<div class="busy">靠近一點、拿穩，再按一次「唸給我聽」。</div>'; return; }
+      ocr.zh=zh; ocr.chunks=splitChunks(zh);
+      shTitle.textContent= lang==='zh'?'看到的文字':(LANGS[lang]+' → 中文翻譯');
+      fillSpans(shZh,ocr.chunks);
+      if(lang!=='zh'&&r.src){ shSrc.textContent='原文：'+r.src; shSrc.style.display='block'; }
+      shBtns.style.display='flex';
+      speakOCR();
+    },function(e){
+      if(id!==ocr.id)return;
+      shTitle.textContent='看字失敗';
+      shZh.innerHTML='';
+      var d=document.createElement('div'); d.className='busy';
+      d.textContent='連線有問題（'+(e&&e.message||'未知')+'），請稍後再試。'; shZh.appendChild(d);
+    });
+  }
+  $('btnSpeakV').addEventListener('click',function(){
+    if(sp.on){stopSpeak();return;}
+    if(sheet.classList.contains('on')&&ocr.chunks.length&&shBtns.style.display!=='none'){ unlock(); speakOCR(); return; }
+    runOCR();
+  });
+  $('shSpeak').addEventListener('click',function(){ if(sp.on){stopSpeak();return;} unlock(); speakOCR(); });
+  $('shClose').addEventListener('click',function(){ stopSpeak(); hideSheet(); ocr.chunks=[]; });
+  $('shToText').addEventListener('click',function(){
+    var t=ocr.zh; stopSpeak(); txtInput.value=t; setMode('txt'); showText();
+  });
+  $('btnFreeze').addEventListener('click',function(){ if(!frozen){ stopSpeak(); hideSheet(); ocr.chunks=[]; } });
+  fileInput.addEventListener('change',function(){ stopSpeak(); hideSheet(); ocr.chunks=[]; });
 
   setMode('cam');
   if(store.getItem('mag_text'))applyFont();
